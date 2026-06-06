@@ -46,3 +46,7 @@ jobs:
           git add files.json
           git diff --staged --quiet || git commit -m "Update GGB file list [skip ci]"
           git push
+          
+      - name: Purge jsDelivr Cache
+        run: |
+          curl -s https://purge.jsdelivr.net/gh/${{ github.repository }}@main/files.json
