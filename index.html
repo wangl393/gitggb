@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GGB 一键预览工具 (Netlify)</title>
+    <title>GGB 一键预览工具 (GitHub Pages)</title>
     <style>
         * {
             margin: 0;
@@ -136,6 +136,12 @@
     </div>
 
     <script>
+        // ========== 请替换为您的 GitHub 信息 ==========
+        const GITHUB_USERNAME = 'wangl393';    // 例如 'zhangsan'
+        const GITHUB_REPO = 'gitggb';         // 例如 'ggb-preview'
+        const GITHUB_BRANCH = 'main';              // 或 'master'
+        // ===========================================
+
         const fileSelect = document.getElementById('ggb-file');
         const widthInput = document.getElementById('width-input');
         const heightInput = document.getElementById('height-input');
@@ -148,6 +154,14 @@
         folderSelectBtn.onclick = loadGgbFiles;
         window.addEventListener('DOMContentLoaded', loadGgbFiles);
 
+        /** 获取当前站点的基础路径（兼容项目站点根目录和子目录） */
+        function getBasePath() {
+            const path = window.location.pathname;
+            // 去掉末尾文件名，保留目录
+            const dir = path.substring(0, path.lastIndexOf('/') + 1);
+            return window.location.origin + dir;
+        }
+
         async function loadGgbFiles() {
             fileSelect.innerHTML = '<option value="">正在加载文件列表…</option>';
             fileSelect.disabled = true;
@@ -155,14 +169,28 @@
             folderError.style.display = 'none';
 
             try {
-                const response = await fetch('/.netlify/functions/ggbFiles');
-                if (!response.ok) throw new Error(`服务器响应失败 (HTTP ${response.status})`);
-                const ggbFiles = await response.json();
+                // 使用 GitHub Contents API 列出 ggbfiles 目录
+                const url = `https://api.github.com/repos/${GITHUB_USERNAME}/${GITHUB_REPO}/contents/ggbfiles?ref=${GITHUB_BRANCH}`;
+                const response = await fetch(url);
+                if (!response.ok) {
+                    if (response.status === 403) {
+                        throw new Error('GitHub API 速率限制，请稍后再试');
+                    } else if (response.status === 404) {
+                        throw new Error('仓库或 ggbfiles 文件夹不存在，请检查配置');
+                    } else {
+                        throw new Error(`GitHub API 响应失败 (HTTP ${response.status})`);
+                    }
+                }
+                const data = await response.json();
+                // 筛选出 .ggb 文件，获取文件名
+                const ggbFiles = data
+                    .filter(item => item.type === 'file' && item.name.endsWith('.ggb'))
+                    .map(item => item.name);
                 updateSelectMenu(ggbFiles);
             } catch (error) {
                 console.error(error);
                 fileSelect.innerHTML = '<option value="">加载失败</option>';
-                folderError.textContent = '无法连接 Netlify Function，请确认已正确部署函数且 ggbfiles 文件夹存在。';
+                folderError.textContent = error.message || '无法获取文件列表，请检查网络或 GitHub 设置';
                 folderError.style.display = 'block';
                 fileCount.textContent = '';
             }
@@ -196,12 +224,13 @@
             const height = heightInput.value;
             if (!fileName || !width || !height) return;
 
-            const previewUrl = `./at.html?file=${encodeURIComponent(fileName)}&width=${width}&height=${height}`;
+            // 预览 iframe 使用相对路径（at.html 与 index.html 同目录）
+            const base = getBasePath();
+            const previewUrl = `${base}at.html?file=${encodeURIComponent(fileName)}&width=${width}&height=${height}`;
             previewIframe.src = previewUrl;
 
-            // 构造用于复制的绝对路径 iframe 标签
-            const absoluteUrl = `${window.location.origin}/at.html?file=${encodeURIComponent(fileName)}&width=${width}&height=${height}`;
-            const iframeHtml = `<iframe src="${absoluteUrl}" width="${width}px" height="${height}px" style="border:0px;"></iframe>`;
+            // 构造用于复制的绝对路径 iframe 标签（可嵌入其他网站）
+            const iframeHtml = `<iframe src="${previewUrl}" width="${width}px" height="${height}px" style="border:0px;"></iframe>`;
 
             try {
                 await navigator.clipboard.writeText(iframeHtml);
