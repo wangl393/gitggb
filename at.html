@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta charset="utf-8" />
+    <script src="GeoGebra/deployggb.js"></script>
+    <style>
+        .GeoGebraFrame {
+            border: 0 !important;
+            background: #fff !important;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="ggbApplet"></div>
+
+    <script>
+        // ==================== 工具函数：解析 URL 参数 ====================
+        function getQueryParam(param, defaultValue) {
+            // 获取当前页面 URL 的查询字符串
+            const urlParams = new URLSearchParams(window.location.search);
+            const value = urlParams.get(param);
+            // 如果参数存在且不是空字符串，则返回参数值；否则返回默认值
+            if (value !== null && value.trim() !== "") {
+                return value;
+            }
+            return defaultValue;
+        }
+
+        // ==================== 默认配置（完全与原始代码保持一致） ====================
+        var parameters = {
+            "id": "ggbApplet",
+            "width": 819,               // 默认宽度
+            "height": 590,              // 默认高度
+            "showMenuBar": false,
+            "showAlgebraInput": false,
+            "showToolBar": false,
+            "customToolBar": "0 39 73 62 | 1 501 67 , 5 19 , 72 75 76 | 2 15 45 , 18 65 , 7 37 | 4 3 8 9 , 13 44 , 58 , 47 | 16 51 64 , 70 | 10 34 53 11 , 24  20 22 , 21 23 | 55 56 57 , 12 | 36 46 , 38 49  50 , 71  14  68 | 30 29 54 32 31 33 | 25 17 26 60 52 61 | 40 41 42 , 27 28 35 , 6",
+            "showToolBarHelp": false,
+            "showResetIcon": false,
+            "enableLabelDrags": false,
+            "enableShiftDragZoom": true,
+            "enableRightClick": false,
+            "errorDialogsActive": false,
+            "useBrowserForJS": false,
+            "allowStyleBar": false,
+            "preventFocus": false,
+            "showZoomButtons": false,
+            "capturingThreshold": 3,
+            // 可选: 应用启动后执行的代码（保留原始空函数）
+            "appletOnLoad": function (api) { /* api.evalCommand('Segment((1,2),(3,4))');*/ },
+            "showFullscreenButton": false,
+            "scale": 1,
+            "disableAutoScale": false,
+            "allowUpscale": false,
+            "clickToLoad": false,
+            "appName": "classic",
+            "buttonRounding": 0.7,
+            "buttonShadows": false,
+            "language": "en",
+            // 默认的 ggb 文件路径（仅文件名部分可通过参数动态替换）
+            "filename": "./ggbfiles/shown.ggb",
+        };
+
+        // ==================== 动态读取 URL 参数并覆盖配置 ====================
+        // 1. 处理宽度参数 (参数名: width)
+        const urlWidth = getQueryParam('width', null);
+        if (urlWidth !== null) {
+            const parsedWidth = parseInt(urlWidth, 10);
+            if (!isNaN(parsedWidth) && parsedWidth > 0) {
+                parameters.width = parsedWidth;
+            } else {
+                console.warn('无效的 width 参数，使用默认值:', parameters.width);
+            }
+        }
+
+        // 2. 处理高度参数 (参数名: height)
+        const urlHeight = getQueryParam('height', null);
+        if (urlHeight !== null) {
+            const parsedHeight = parseInt(urlHeight, 10);
+            if (!isNaN(parsedHeight) && parsedHeight > 0) {
+                parameters.height = parsedHeight;
+            } else {
+                console.warn('无效的 height 参数，使用默认值:', parameters.height);
+            }
+        }
+
+        // 3. 处理文件名参数 (参数名: file 或 filename, 优先使用 file)
+        //    要求: 仅替换文件名部分，路径前缀 "./ggbfiles/" 保持不变
+        let ggbFileParam = getQueryParam('file', null);
+        if (ggbFileParam === null) {
+            // 兼容参数名 'filename'（若用户习惯使用 filename）
+            ggbFileParam = getQueryParam('filename', null);
+        }
+        if (ggbFileParam !== null) {
+            // 基础路径不变，只拼接文件名
+            // 防止路径穿越攻击（本地使用，仅做简单防护：移除可能危险的 ../ 等字符）
+            let safeFileName = ggbFileParam.replace(/\.\./g, '').replace(/[\\/]/g, '');
+            if (safeFileName.trim() === "") {
+                safeFileName = "shown.ggb";   // 若文件名被清空则回退
+            }
+            // 如果用户没有传入 .ggb 后缀，保留原样（GeoGebra 支持 .ggb 格式，但也允许其他扩展，不过习惯保留）
+            parameters.filename = "./ggbfiles/" + safeFileName;
+            console.log(`动态加载 ggb 文件: ${parameters.filename}`);
+        } else {
+            // 无参数时保持默认
+            console.log(`使用默认 ggb 文件: ${parameters.filename}`);
+        }
+
+        // 可选: 打印最终配置，便于调试（生产环境可注释）
+        console.log(`最终 applet 配置: 宽度=${parameters.width}, 高度=${parameters.height}, 文件=${parameters.filename}`);
+
+        // ==================== 初始化 GeoGebra Applet ====================
+        // is3D=is 3D applet using 3D view, AV=Algebra View, SV=Spreadsheet View, CV=CAS View, EV2=Graphics View 2, CP=Construction Protocol, PC=Probability Calculator DA=Data Analysis, FI=Function Inspector, macro=Macros
+        var views = { 'is3D': 1, 'AV': 0, 'SV': 0, 'CV': 0, 'EV2': 0, 'CP': 0, 'PC': 0, 'DA': 0, 'FI': 0, 'macro': 0 };
+        var applet = new GGBApplet(parameters, '5.0', views);
+		applet.setHTML5Codebase('GeoGebra/HTML5/5.0/web3d/');
+        window.onload = function () { applet.inject('ggbApplet'); };
+		 </script>
+</body>
+
+</html>

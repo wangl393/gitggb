@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GGB 一键预览工具 (Netlify)</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: Arial, sans-serif;
+        }
+
+        body {
+            display: flex;
+            height: 100vh;
+            padding: 20px;
+            gap: 20px;
+        }
+
+        .preview-area {
+            flex: 1;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        #preview-iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+
+        .control-area {
+            width: 350px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            padding: 20px;
+            border: 1px solid #eee;
+            border-radius: 8px;
+            background: #f9f9f9;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        label {
+            font-weight: 600;
+            color: #333;
+        }
+
+        select,
+        input,
+        button {
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        button:hover {
+            background: #0056b3;
+        }
+
+        button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+
+        #folder-select {
+            background: #28a745;
+        }
+
+        #folder-select:hover {
+            background: #218838;
+        }
+
+        .tip {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .error-tip {
+            color: #dc3545;
+            font-weight: 500;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="preview-area">
+        <iframe id="preview-iframe" src="about:blank"></iframe>
+    </div>
+
+    <div class="control-area">
+        <div class="control-group">
+            <button id="folder-select">刷新文件列表</button>
+            <div class="tip">自动读取 <strong>ggbfiles</strong> 文件夹中的 .ggb 文件</div>
+            <div id="folder-error" class="tip error-tip" style="display: none;"></div>
+        </div>
+
+        <div class="control-group">
+            <label for="ggb-file">选择 GGB 文件</label>
+            <select id="ggb-file" disabled>
+                <option value="">正在初始化…</option>
+            </select>
+            <div id="file-count" class="tip"></div>
+        </div>
+
+        <div class="control-group">
+            <label for="width-input">宽度</label>
+            <input type="number" id="width-input" value="819" min="100">
+        </div>
+
+        <div class="control-group">
+            <label for="height-input">高度</label>
+            <input type="number" id="height-input" value="590" min="100">
+        </div>
+
+        <button id="preview-btn" disabled>预览并复制链接</button>
+    </div>
+
+    <script>
+        const fileSelect = document.getElementById('ggb-file');
+        const widthInput = document.getElementById('width-input');
+        const heightInput = document.getElementById('height-input');
+        const previewBtn = document.getElementById('preview-btn');
+        const previewIframe = document.getElementById('preview-iframe');
+        const fileCount = document.getElementById('file-count');
+        const folderError = document.getElementById('folder-error');
+        const folderSelectBtn = document.getElementById('folder-select');
+
+        folderSelectBtn.onclick = loadGgbFiles;
+        window.addEventListener('DOMContentLoaded', loadGgbFiles);
+
+        async function loadGgbFiles() {
+            fileSelect.innerHTML = '<option value="">正在加载文件列表…</option>';
+            fileSelect.disabled = true;
+            previewBtn.disabled = true;
+            folderError.style.display = 'none';
+
+            try {
+                const response = await fetch('/.netlify/functions/ggbFiles');
+                if (!response.ok) throw new Error(`服务器响应失败 (HTTP ${response.status})`);
+                const ggbFiles = await response.json();
+                updateSelectMenu(ggbFiles);
+            } catch (error) {
+                console.error(error);
+                fileSelect.innerHTML = '<option value="">加载失败</option>';
+                folderError.textContent = '无法连接 Netlify Function，请确认已正确部署函数且 ggbfiles 文件夹存在。';
+                folderError.style.display = 'block';
+                fileCount.textContent = '';
+            }
+        }
+
+        function updateSelectMenu(files) {
+            fileSelect.innerHTML = '';
+            if (!files || files.length === 0) {
+                fileSelect.innerHTML = '<option value="">ggbfiles 文件夹中没有 .ggb 文件</option>';
+                fileCount.textContent = '共找到 0 个文件';
+                return;
+            }
+
+            files.forEach(fileName => {
+                const option = document.createElement('option');
+                option.value = fileName;
+                option.textContent = fileName;
+                fileSelect.appendChild(option);
+            });
+
+            fileSelect.disabled = false;
+            previewBtn.disabled = false;
+            fileCount.textContent = `共自动读取到 ${files.length} 个 GGB 文件`;
+            // 自动预览第一个文件
+            previewFile();
+        }
+
+        async function previewFile() {
+            const fileName = fileSelect.value;
+            const width = widthInput.value;
+            const height = heightInput.value;
+            if (!fileName || !width || !height) return;
+
+            const previewUrl = `./at.html?file=${encodeURIComponent(fileName)}&width=${width}&height=${height}`;
+            previewIframe.src = previewUrl;
+
+            // 构造用于复制的绝对路径 iframe 标签
+            const absoluteUrl = `${window.location.origin}/at.html?file=${encodeURIComponent(fileName)}&width=${width}&height=${height}`;
+            const iframeHtml = `<iframe src="${absoluteUrl}" width="${width}px" height="${height}px" style="border:0px;"></iframe>`;
+
+            try {
+                await navigator.clipboard.writeText(iframeHtml);
+                console.log('已自动复制 iframe 标签');
+            } catch (err) {
+                console.error('自动复制失败:', err);
+            }
+        }
+
+        fileSelect.addEventListener('change', previewFile);
+        widthInput.addEventListener('input', previewFile);
+        heightInput.addEventListener('input', previewFile);
+        previewBtn.addEventListener('click', previewFile);
+    </script>
+</body>
+
+</html>
