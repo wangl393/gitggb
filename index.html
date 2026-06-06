@@ -3,80 +3,229 @@
 
 <head>
     <meta charset="UTF-8">
-    <title>GGB文件预览</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GGB 一键预览工具 (GitHub Pages)</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: Arial, sans-serif;
+        }
+
+        body {
+            display: flex;
+            height: 100vh;
+            padding: 20px;
+            gap: 20px;
+        }
+
+        .preview-area {
+            flex: 1;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        #preview-iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+
+        .control-area {
+            width: 350px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            padding: 20px;
+            border: 1px solid #eee;
+            border-radius: 8px;
+            background: #f9f9f9;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        label {
+            font-weight: 600;
+            color: #333;
+        }
+
+        select,
+        input,
+        button {
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        button:hover {
+            background: #0056b3;
+        }
+
+        button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+
+        #folder-select {
+            background: #28a745;
+        }
+
+        #folder-select:hover {
+            background: #218838;
+        }
+
+        .tip {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .error-tip {
+            color: #dc3545;
+            font-weight: 500;
+        }
+    </style>
 </head>
 
 <body>
-    <select id="fileSelect"></select>
-    <button id="previewBtn">打开预览</button>
-    <button id="folderSelectBtn">刷新文件列表</button>
-    <div id="folderError" style="color:red;display:none"></div>
-    <span id="fileCount"></span>
+    <div class="preview-area">
+        <iframe id="preview-iframe" src="about:blank"></iframe>
+    </div>
+
+    <div class="control-area">
+        <div class="control-group">
+            <button id="folder-select">刷新文件列表</button>
+            <div class="tip">自动读取 <strong>ggbfiles</strong> 文件夹中的 .ggb 文件</div>
+            <div id="folder-error" class="tip error-tip" style="display: none;"></div>
+        </div>
+
+        <div class="control-group">
+            <label for="ggb-file">选择 GGB 文件</label>
+            <select id="ggb-file" disabled>
+                <option value="">正在初始化…</option>
+            </select>
+            <div id="file-count" class="tip"></div>
+        </div>
+
+        <div class="control-group">
+            <label for="width-input">宽度</label>
+            <input type="number" id="width-input" value="819" min="100">
+        </div>
+
+        <div class="control-group">
+            <label for="height-input">高度</label>
+            <input type="number" id="height-input" value="590" min="100">
+        </div>
+
+        <button id="preview-btn" disabled>预览并复制链接</button>
+    </div>
 
     <script>
-        const fileSelect = document.getElementById('fileSelect');
-        const previewBtn = document.getElementById('previewBtn');
-        const folderSelectBtn = document.getElementById('folderSelectBtn');
-        const folderError = document.getElementById('folderError');
-        const fileCount = document.getElementById('fileCount');
 
-        // 带缓存破除+重试完整版加载函数
-        async function loadGgbFiles(retries = 3) {
+
+        const fileSelect = document.getElementById('ggb-file');
+        const widthInput = document.getElementById('width-input');
+        const heightInput = document.getElementById('height-input');
+        const previewBtn = document.getElementById('preview-btn');
+        const previewIframe = document.getElementById('preview-iframe');
+        const fileCount = document.getElementById('file-count');
+        const folderError = document.getElementById('folder-error');
+        const folderSelectBtn = document.getElementById('folder-select');
+
+        folderSelectBtn.onclick = loadGgbFiles;
+        window.addEventListener('DOMContentLoaded', loadGgbFiles);
+
+        /** 获取当前站点的基础路径（兼容项目站点根目录和子目录） */
+        function getBasePath() {
+            const path = window.location.pathname;
+            // 去掉末尾文件名，保留目录
+            const dir = path.substring(0, path.lastIndexOf('/') + 1);
+            return window.location.origin + dir;
+        }
+
+        async function loadGgbFiles() {
             fileSelect.innerHTML = '<option value="">正在加载文件列表…</option>';
             fileSelect.disabled = true;
             previewBtn.disabled = true;
             folderError.style.display = 'none';
 
-            for (let i = 0; i < retries; i++) {
-                try {
-                    const timestamp = Date.now();
-                    const res = await fetch(`./files.json?t=${timestamp}`);
-                    if (!res.ok) throw new Error(res.status);
-                    const list = await res.json();
-                    updateSelectMenu(list);
-                    return;
-                } catch (err) {
-                    if (i === retries - 1) {
-                        fileSelect.innerHTML = '<option value="">加载失败</option>';
-                        folderError.textContent = '无法获取文件列表';
-                        folderError.style.display = 'block';
-                        fileCount.textContent = '';
-                    } else {
-                        await new Promise(r => setTimeout(r, 2000));
-                    }
-                }
+            try {
+                const response = await fetch('./files.json');   // 与 index.html 同目录
+                if (!response.ok) throw new Error(`加载失败 (HTTP ${response.status})`);
+                const ggbFiles = await response.json();
+                updateSelectMenu(ggbFiles);
+            } catch (error) {
+                console.error(error);
+                fileSelect.innerHTML = '<option value="">加载失败</option>';
+                folderError.textContent = '无法获取文件列表，请确认 files.json 已生成。';
+                folderError.style.display = 'block';
+                fileCount.textContent = '';
             }
         }
 
-        function updateSelectMenu(list) {
-            fileSelect.innerHTML = '<option value="">请选择ggb文件</option>';
-            list.forEach(name => {
-                const opt = document.createElement('option');
-                opt.value = name;
-                opt.innerText = name;
-                fileSelect.appendChild(opt);
-            })
+        function updateSelectMenu(files) {
+            fileSelect.innerHTML = '';
+            if (!files || files.length === 0) {
+                fileSelect.innerHTML = '<option value="">ggbfiles 文件夹中没有 .ggb 文件</option>';
+                fileCount.textContent = '共找到 0 个文件';
+                return;
+            }
+
+            files.forEach(fileName => {
+                const option = document.createElement('option');
+                option.value = fileName;
+                option.textContent = fileName;
+                fileSelect.appendChild(option);
+            });
+
             fileSelect.disabled = false;
             previewBtn.disabled = false;
-            fileCount.textContent = `共${list.length}个文件`;
+            fileCount.textContent = `共自动读取到 ${files.length} 个 GGB 文件`;
+            // 自动预览第一个文件
+            previewFile();
         }
 
-        // 刷新按钮
-        folderSelectBtn.onclick = async () => {
-            folderSelectBtn.textContent = '正在刷新…';
-            await loadGgbFiles();
-            folderSelectBtn.textContent = '刷新文件列表';
+        async function previewFile() {
+            const fileName = fileSelect.value;
+            const width = widthInput.value;
+            const height = heightInput.value;
+            if (!fileName || !width || !height) return;
+
+            // 预览 iframe 使用相对路径（at.html 与 index.html 同目录）
+            const base = getBasePath();
+            const previewUrl = `${base}at.html?file=${encodeURIComponent(fileName)}&width=${width}&height=${height}`;
+            previewIframe.src = previewUrl;
+
+            // 构造用于复制的绝对路径 iframe 标签（可嵌入其他网站）
+            const iframeHtml = `<iframe src="${previewUrl}" width="${width}px" height="${height}px" style="border:0px;"></iframe>`;
+
+            try {
+                await navigator.clipboard.writeText(iframeHtml);
+                console.log('已自动复制 iframe 标签');
+            } catch (err) {
+                console.error('自动复制失败:', err);
+            }
         }
 
-        // 页面初始化
-        loadGgbFiles();
-
-        // 预览按钮自行补充原有打开ggb逻辑
-        previewBtn.onclick = () => {
-            const name = fileSelect.value;
-            if (!name) return;
-            // 原有预览代码
-        }
+        fileSelect.addEventListener('change', previewFile);
+        widthInput.addEventListener('input', previewFile);
+        heightInput.addEventListener('input', previewFile);
+        previewBtn.addEventListener('click', previewFile);
     </script>
 </body>
 
