@@ -4,7 +4,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GGB 12一键预览工具 (GitHub Pages)</title>
+    <title>GGB 13一键预览工具 (GitHub Pages)</title>
+
     <style>
         * {
             margin: 0;
@@ -103,22 +104,29 @@
 </head>
 
 <body>
+
     <div class="preview-area">
         <iframe id="preview-iframe" src="about:blank"></iframe>
     </div>
 
     <div class="control-area">
+
         <div class="control-group">
             <button id="folder-select">刷新文件列表</button>
-            <div class="tip">自动读取 <strong>ggbfiles</strong> 文件夹中的 .ggb 文件</div>
-            <div id="folder-error" class="tip error-tip" style="display: none;"></div>
+            <div class="tip">
+                自动读取 <strong>ggbfiles</strong> 文件夹中的 .ggb 文件
+            </div>
+            <div id="folder-error" class="tip error-tip" style="display:none;">
+            </div>
         </div>
 
         <div class="control-group">
             <label for="ggb-file">选择 GGB 文件</label>
+
             <select id="ggb-file" disabled>
-                <option value="">正在初始化…</option>
+                <option value="">正在初始化...</option>
             </select>
+
             <div id="file-count" class="tip"></div>
         </div>
 
@@ -132,11 +140,21 @@
             <input type="number" id="height-input" value="590" min="100">
         </div>
 
-        <button id="preview-btn" disabled>预览并复制链接</button>
+        <button id="preview-btn" disabled>
+            预览并复制链接
+        </button>
+
     </div>
 
     <script>
 
+        // ==========================================
+        // GitHub Action 自动替换这里
+        // ==========================================
+        const GGB_FILES = __FILE_LIST__;
+        // 例如：
+        // const GGB_FILES = ["a.ggb","b.ggb","c.ggb"];
+        // ==========================================
 
         const fileSelect = document.getElementById('ggb-file');
         const widthInput = document.getElementById('width-input');
@@ -148,85 +166,154 @@
         const folderSelectBtn = document.getElementById('folder-select');
 
         folderSelectBtn.onclick = loadGgbFiles;
-        window.addEventListener('DOMContentLoaded', loadGgbFiles);
 
-        /** 获取当前站点的基础路径（兼容项目站点根目录和子目录） */
+        window.addEventListener(
+            'DOMContentLoaded',
+            loadGgbFiles
+        );
+
         function getBasePath() {
             const path = window.location.pathname;
-            // 去掉末尾文件名，保留目录
-            const dir = path.substring(0, path.lastIndexOf('/') + 1);
+
+            const dir =
+                path.substring(
+                    0,
+                    path.lastIndexOf('/') + 1
+                );
+
             return window.location.origin + dir;
         }
 
-        async function loadGgbFiles() {
-            fileSelect.innerHTML = '<option value="">正在加载文件列表…</option>';
+        function loadGgbFiles() {
+
+            fileSelect.innerHTML =
+                '<option value="">正在加载文件列表...</option>';
+
             fileSelect.disabled = true;
             previewBtn.disabled = true;
+
             folderError.style.display = 'none';
 
             try {
-                const response = await fetch('./files.json');   // 与 index.html 同目录
-                if (!response.ok) throw new Error(`加载失败 (HTTP ${response.status})`);
-                const ggbFiles = await response.json();
-                updateSelectMenu(ggbFiles);
+
+                updateSelectMenu(GGB_FILES);
+
             } catch (error) {
+
                 console.error(error);
-                fileSelect.innerHTML = '<option value="">加载失败</option>';
-                folderError.textContent = '无法获取文件列表，请确认 files.json 已生成。';
+
+                fileSelect.innerHTML =
+                    '<option value="">加载失败</option>';
+
+                folderError.textContent =
+                    '文件列表初始化失败';
+
                 folderError.style.display = 'block';
+
                 fileCount.textContent = '';
             }
         }
 
         function updateSelectMenu(files) {
+
             fileSelect.innerHTML = '';
+
             if (!files || files.length === 0) {
-                fileSelect.innerHTML = '<option value="">ggbfiles 文件夹中没有 .ggb 文件</option>';
-                fileCount.textContent = '共找到 0 个文件';
+
+                fileSelect.innerHTML =
+                    '<option value="">ggbfiles 文件夹中没有 .ggb 文件</option>';
+
+                fileCount.textContent =
+                    '共找到 0 个文件';
+
                 return;
             }
 
             files.forEach(fileName => {
-                const option = document.createElement('option');
+
+                const option =
+                    document.createElement('option');
+
                 option.value = fileName;
                 option.textContent = fileName;
+
                 fileSelect.appendChild(option);
             });
 
             fileSelect.disabled = false;
             previewBtn.disabled = false;
-            fileCount.textContent = `共自动读取到 ${files.length} 个 GGB 文件`;
-            // 自动预览第一个文件
+
+            fileCount.textContent =
+                `共自动读取到 ${files.length} 个 GGB 文件`;
+
             previewFile();
         }
 
         async function previewFile() {
+
             const fileName = fileSelect.value;
             const width = widthInput.value;
             const height = heightInput.value;
-            if (!fileName || !width || !height) return;
 
-            // 预览 iframe 使用相对路径（at.html 与 index.html 同目录）
+            if (
+                !fileName ||
+                !width ||
+                !height
+            ) {
+                return;
+            }
+
             const base = getBasePath();
-            const previewUrl = `${base}at.html?file=${encodeURIComponent(fileName)}&width=${width}&height=${height}`;
+
+            const previewUrl =
+                `${base}at.html?file=${encodeURIComponent(fileName)}&width=${width}&height=${height}`;
+
             previewIframe.src = previewUrl;
 
-            // 构造用于复制的绝对路径 iframe 标签（可嵌入其他网站）
-            const iframeHtml = `<iframe src="${previewUrl}" width="${width}px" height="${height}px" style="border:0px;"></iframe>`;
+            const iframeHtml =
+                `<iframe src="${previewUrl}" width="${width}px" height="${height}px" style="border:0px;"></iframe>`;
 
             try {
-                await navigator.clipboard.writeText(iframeHtml);
-                console.log('已自动复制 iframe 标签');
+
+                await navigator.clipboard.writeText(
+                    iframeHtml
+                );
+
+                console.log(
+                    '已自动复制 iframe 标签'
+                );
+
             } catch (err) {
-                console.error('自动复制失败:', err);
+
+                console.error(
+                    '自动复制失败:',
+                    err
+                );
             }
         }
 
-        fileSelect.addEventListener('change', previewFile);
-        widthInput.addEventListener('input', previewFile);
-        heightInput.addEventListener('input', previewFile);
-        previewBtn.addEventListener('click', previewFile);
+        fileSelect.addEventListener(
+            'change',
+            previewFile
+        );
+
+        widthInput.addEventListener(
+            'input',
+            previewFile
+        );
+
+        heightInput.addEventListener(
+            'input',
+            previewFile
+        );
+
+        previewBtn.addEventListener(
+            'click',
+            previewFile
+        );
+
     </script>
+
 </body>
 
 </html>
