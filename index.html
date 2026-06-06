@@ -136,11 +136,7 @@
     </div>
 
     <script>
-        // ========== 请替换为您的 GitHub 信息 ==========
-        const GITHUB_USERNAME = 'wangl393';    // 例如 'zhangsan'
-        const GITHUB_REPO = 'gitggb';         // 例如 'ggb-preview'
-        const GITHUB_BRANCH = 'main';              // 或 'master'
-        // ===========================================
+
 
         const fileSelect = document.getElementById('ggb-file');
         const widthInput = document.getElementById('width-input');
@@ -169,28 +165,14 @@
             folderError.style.display = 'none';
 
             try {
-                // 使用 GitHub Contents API 列出 ggbfiles 目录
-                const url = `https://api.github.com/repos/${GITHUB_USERNAME}/${GITHUB_REPO}/contents/ggbfiles?ref=${GITHUB_BRANCH}`;
-                const response = await fetch(url);
-                if (!response.ok) {
-                    if (response.status === 403) {
-                        throw new Error('GitHub API 速率限制，请稍后再试');
-                    } else if (response.status === 404) {
-                        throw new Error('仓库或 ggbfiles 文件夹不存在，请检查配置');
-                    } else {
-                        throw new Error(`GitHub API 响应失败 (HTTP ${response.status})`);
-                    }
-                }
-                const data = await response.json();
-                // 筛选出 .ggb 文件，获取文件名
-                const ggbFiles = data
-                    .filter(item => item.type === 'file' && item.name.endsWith('.ggb'))
-                    .map(item => item.name);
+                const response = await fetch('./files.json');   // 与 index.html 同目录
+                if (!response.ok) throw new Error(`加载失败 (HTTP ${response.status})`);
+                const ggbFiles = await response.json();
                 updateSelectMenu(ggbFiles);
             } catch (error) {
                 console.error(error);
                 fileSelect.innerHTML = '<option value="">加载失败</option>';
-                folderError.textContent = error.message || '无法获取文件列表，请检查网络或 GitHub 设置';
+                folderError.textContent = '无法获取文件列表，请确认 files.json 已生成。';
                 folderError.style.display = 'block';
                 fileCount.textContent = '';
             }
