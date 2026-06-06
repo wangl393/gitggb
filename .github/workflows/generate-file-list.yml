@@ -4,8 +4,8 @@ on:
   push:
     branches: [ main ]
     paths:
-      - 'ggbfiles/**'          # 仅当 ggbfiles 目录下文件变化时触发
-  workflow_dispatch:            # 允许手动触发
+      - 'ggbfiles/**'
+  workflow_dispatch:
 
 jobs:
   generate:
@@ -17,32 +17,30 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Generate files.json
+      - name: Generate files.json and version.json
         run: |
-          # 扫描 ggbfiles 下所有 .ggb 文件，生成 JSON 数组
+          # 1. 扫描 .ggb 文件，生成 files.json
           files=()
           for f in ggbfiles/*.ggb; do
             [ -f "$f" ] && files+=("$(basename "$f")")
           done
-          # 使用 jq 生成合法 JSON（若未安装则用简易脚本）
-          if command -v jq &> /dev/null; then
-            printf '%s\n' "${files[@]}" | jq -R -s -c 'split("\n")[:-1]' > files.json
-          else
-            echo '[' > files.json
-            first=true
-            for f in "${files[@]}"; do
-              [ "$first" = true ] && first=false || echo ',' >> files.json
-              echo "\"$f\"" >> files.json
-            done
-            echo ']' >> files.json
-          fi
-          echo "Generated files.json:"
-          cat files.json
+          echo '[' > files.json
+          first=true
+          for f in "${files[@]}"; do
+            [ "$first" = true ] && first=false || echo ',' >> files.json
+            echo "\"$f\"" >> files.json
+          done
+          echo ']' >> files.json
+
+          # 2. 生成 version.json，使用当前时间戳作为版本号
+          VERSION=$(date +%s)
+          echo "{\"version\": ${VERSION}}" > version.json
+          echo "Generated version.json: $(cat version.json)"
 
       - name: Commit and push if changed
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
-          git add files.json
-          git diff --staged --quiet || git commit -m "Update GGB file list [skip ci]"
+          git add files.json version.json
+          git diff --staged --quiet || git commit -m "Update file list and version [skip ci]"
           git push

@@ -165,14 +165,25 @@
             folderError.style.display = 'none';
 
             try {
-                const response = await fetch('./files.json?t=' + Date.now());  // 与 index.html 同目录
-                if (!response.ok) throw new Error(`加载失败 (HTTP ${response.status})`);
+                // 1. 获取最新版本号（强制不缓存）
+                const versionRes = await fetch('./version.json?t=' + Date.now(), {
+                    cache: 'no-store'  // 确保不走浏览器缓存
+                });
+                if (!versionRes.ok) throw new Error(`版本文件加载失败 (HTTP ${versionRes.status})`);
+                const versionData = await versionRes.json();
+                const currentVersion = versionData.version;
+
+                // 2. 用版本号作为查询参数请求 files.json（CDN 视为新 URL）
+                const response = await fetch(`./files.json?v=${currentVersion}`, {
+                    cache: 'no-store'  // 也可不加，因为查询参数变化已确保新鲜
+                });
+                if (!response.ok) throw new Error(`文件列表加载失败 (HTTP ${response.status})`);
                 const ggbFiles = await response.json();
                 updateSelectMenu(ggbFiles);
             } catch (error) {
                 console.error(error);
                 fileSelect.innerHTML = '<option value="">加载失败</option>';
-                folderError.textContent = '无法获取文件列表，请确认 files.json 已生成。';
+                folderError.textContent = '无法获取文件列表，请确认 version.json 和 files.json 已生成。';
                 folderError.style.display = 'block';
                 fileCount.textContent = '';
             }
