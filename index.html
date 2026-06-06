@@ -165,7 +165,7 @@
             folderError.style.display = 'none';
 
             try {
-                const response = await fetch('./files.json?t=' + Date.now());  // 与 index.html 同目录
+                const response = await fetch('./files.json');   // 与 index.html 同目录
                 if (!response.ok) throw new Error(`加载失败 (HTTP ${response.status})`);
                 const ggbFiles = await response.json();
                 updateSelectMenu(ggbFiles);
