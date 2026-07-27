@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GGB 13一键预览工具 (GitHub Pages)</title>
+    <title>GGB 13一键预览工具 (支持平滑子目录)</title>
 
     <style>
         * {
@@ -56,7 +56,6 @@
             color: #333;
         }
 
-        select,
         input,
         button {
             padding: 10px;
@@ -100,6 +99,70 @@
             color: #dc3545;
             font-weight: 500;
         }
+
+        /* ================= 文件树视图 & 平滑折叠动画样式 ================= */
+        #file-tree-container {
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            max-height: 400px;
+            overflow-y: auto;
+            background: #fff;
+            padding: 10px;
+            font-size: 14px;
+        }
+
+        ul.tree-list {
+            list-style: none;
+            padding-left: 20px; /* 控制子目录的缩进 */
+            margin: 0;
+        }
+
+        ul.tree-list.root-list {
+            padding-left: 0;
+        }
+
+        /* 平滑动画核心：使用 Grid 布局的 0fr 到 1fr 转换 */
+        .tree-wrapper {
+            display: grid;
+            grid-template-rows: 0fr;
+            transition: grid-template-rows 0.3s ease-in-out;
+        }
+
+        .tree-wrapper.expanded {
+            grid-template-rows: 1fr;
+        }
+
+        .tree-list.inner {
+            min-height: 0; /* 必须加，配合 grid 实现内容溢出隐藏 */
+            overflow: hidden;
+        }
+
+        .folder-node, .file-node {
+            cursor: pointer;
+            padding: 6px 8px;
+            user-select: none;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            transition: background-color 0.1s;
+        }
+
+        .folder-node:hover, .file-node:hover {
+            background-color: #f1f3f5;
+        }
+
+        .file-node.selected {
+            background-color: #e7f1ff;
+            color: #0056b3;
+            font-weight: bold;
+        }
+
+        .tree-icon {
+            margin-right: 6px;
+            font-size: 14px;
+            width: 18px;
+            text-align: center;
+        }
     </style>
 </head>
 
@@ -114,19 +177,17 @@
         <div class="control-group">
             <button id="folder-select">刷新文件列表</button>
             <div class="tip">
-                自动读取 <strong>ggbfiles</strong> 文件夹中的 .ggb 文件
+                自动读取 <strong>ggbfiles</strong> 文件夹中的 .ggb 文件（支持子文件夹）
             </div>
             <div id="folder-error" class="tip error-tip" style="display:none;">
             </div>
         </div>
 
         <div class="control-group">
-            <label for="ggb-file">选择 GGB 文件</label>
-
-            <select id="ggb-file" disabled>
-                <option value="">正在初始化...</option>
-            </select>
-
+            <label>选择 GGB 文件</label>
+            <div id="file-tree-container">
+                <div style="color: #666;">正在初始化...</div>
+            </div>
             <div id="file-count" class="tip"></div>
         </div>
 
@@ -147,16 +208,25 @@
     </div>
 
     <script>
-
         // ==========================================
         // GitHub Action 自动替换这里
         // ==========================================
-        const GGB_FILES = ["024.ggb","0616三角旋转.ggb","155.ggb","ggggg.ggb","kuku.ggb","shown.ggb","slow.ggb"];
-        // 例如：
-        // const GGB_FILES = ["024.ggb","0616三角旋转.ggb","155.ggb","ggggg.ggb","kuku.ggb","shown.ggb","slow.ggb"];
+        // 这次加入了包含 "/" 的路径，以确保你能看到真实的树状子目录结构
+        const GGB_FILES = [
+            "024.ggb",
+            "根目录单文件.ggb",
+            "初中数学/0616三角旋转.ggb",
+            "初中数学/155.ggb",
+            "初中数学/几何进阶/slow.ggb",
+            "高中物理/力学/ggggg.ggb",
+            "高中物理/电磁学/kuku.ggb",
+            "高中物理/电磁学/shown.ggb"
+        ];
         // ==========================================
 
-        const fileSelect = document.getElementById('ggb-file');
+        let currentSelectedFile = ""; 
+
+        const fileTreeContainer = document.getElementById('file-tree-container');
         const widthInput = document.getElementById('width-input');
         const heightInput = document.getElementById('height-input');
         const previewBtn = document.getElementById('preview-btn');
@@ -167,153 +237,181 @@
 
         folderSelectBtn.onclick = loadGgbFiles;
 
-        window.addEventListener(
-            'DOMContentLoaded',
-            loadGgbFiles
-        );
+        window.addEventListener('DOMContentLoaded', loadGgbFiles);
 
         function getBasePath() {
             const path = window.location.pathname;
-
-            const dir =
-                path.substring(
-                    0,
-                    path.lastIndexOf('/') + 1
-                );
-
+            const dir = path.substring(0, path.lastIndexOf('/') + 1);
             return window.location.origin + dir;
         }
 
         function loadGgbFiles() {
-
-            fileSelect.innerHTML =
-                '<option value="">正在加载文件列表...</option>';
-
-            fileSelect.disabled = true;
+            fileTreeContainer.innerHTML = '<div style="color: #666;">正在加载文件列表...</div>';
             previewBtn.disabled = true;
-
             folderError.style.display = 'none';
 
             try {
-
-                updateSelectMenu(GGB_FILES);
-
+                updateTreeMenu(GGB_FILES);
             } catch (error) {
-
                 console.error(error);
-
-                fileSelect.innerHTML =
-                    '<option value="">加载失败</option>';
-
-                folderError.textContent =
-                    '文件列表初始化失败';
-
+                fileTreeContainer.innerHTML = '<div style="color: #dc3545;">加载失败</div>';
+                folderError.textContent = '文件列表初始化失败';
                 folderError.style.display = 'block';
-
                 fileCount.textContent = '';
             }
         }
 
-        function updateSelectMenu(files) {
-
-            fileSelect.innerHTML = '';
+        function updateTreeMenu(files) {
+            fileTreeContainer.innerHTML = '';
 
             if (!files || files.length === 0) {
-
-                fileSelect.innerHTML =
-                    '<option value="">ggbfiles 文件夹中没有 .ggb 文件</option>';
-
-                fileCount.textContent =
-                    '共找到 0 个文件';
-
+                fileTreeContainer.innerHTML = '<div style="color: #666;">ggbfiles 文件夹中没有 .ggb 文件</div>';
+                fileCount.textContent = '共找到 0 个文件';
                 return;
             }
 
-            files.forEach(fileName => {
-
-                const option =
-                    document.createElement('option');
-
-                option.value = fileName;
-                option.textContent = fileName;
-
-                fileSelect.appendChild(option);
+            // 1. 根据路径数组生成对象树结构
+            const tree = {};
+            files.forEach(path => {
+                const parts = path.split('/');
+                let current = tree;
+                for (let i = 0; i < parts.length; i++) {
+                    const part = parts[i];
+                    if (i === parts.length - 1) {
+                        current[part] = path; // 叶子节点，存储完整相对路径
+                    } else {
+                        if (!current[part]) current[part] = {}; // 枝干节点，生成子文件夹
+                        current = current[part];
+                    }
+                }
             });
 
-            fileSelect.disabled = false;
-            previewBtn.disabled = false;
+            // 2. 渲染 DOM
+            const rootUl = document.createElement('ul');
+            rootUl.className = 'tree-list root-list';
+            const rootLi = document.createElement('li');
+            
+            const rootFolderDiv = document.createElement('div');
+            rootFolderDiv.className = 'folder-node';
+            rootFolderDiv.innerHTML = '<span class="tree-icon">📁</span> ggbfiles 根目录';
+            
+            // 根目录包裹层，用于动画
+            const rootWrapper = document.createElement('div');
+            rootWrapper.className = 'tree-wrapper'; // 默认没有 .expanded，即折叠状态
 
-            fileCount.textContent =
-                `共自动读取到 ${files.length} 个 GGB 文件`;
+            const childrenUl = buildTreeDOM(tree);
+            childrenUl.className = 'tree-list inner';
+            rootWrapper.appendChild(childrenUl);
 
-            previewFile();
+            // 点击展开/折叠
+            rootFolderDiv.onclick = (e) => {
+                e.stopPropagation();
+                rootWrapper.classList.toggle('expanded');
+                const isExpanded = rootWrapper.classList.contains('expanded');
+                rootFolderDiv.querySelector('.tree-icon').textContent = isExpanded ? '📂' : '📁';
+            };
+
+            rootLi.appendChild(rootFolderDiv);
+            rootLi.appendChild(rootWrapper);
+            rootUl.appendChild(rootLi);
+
+            fileTreeContainer.appendChild(rootUl);
+            fileCount.textContent = `共读取到 ${files.length} 个文件`;
         }
 
-        async function previewFile() {
+        // 递归渲染子树并返回 ul 元素
+        function buildTreeDOM(treeNode) {
+            const ul = document.createElement('ul');
 
-            const fileName = fileSelect.value;
+            // 排序逻辑：文件夹优先，同类按字母排序
+            const keys = Object.keys(treeNode).sort((a, b) => {
+                const isFolderA = typeof treeNode[a] === 'object';
+                const isFolderB = typeof treeNode[b] === 'object';
+                if (isFolderA && !isFolderB) return -1;
+                if (!isFolderA && isFolderB) return 1;
+                return a.localeCompare(b, 'zh-CN');
+            });
+
+            keys.forEach(key => {
+                const value = treeNode[key];
+                const li = document.createElement('li');
+
+                if (typeof value === 'string') {
+                    // 这是具体的文件
+                    li.className = 'file-node';
+                    li.innerHTML = `<span class="tree-icon">📄</span> ${key}`;
+                    
+                    li.onclick = (e) => {
+                        e.stopPropagation();
+                        // 切换高亮状态
+                        document.querySelectorAll('.file-node').forEach(el => el.classList.remove('selected'));
+                        li.classList.add('selected');
+                        
+                        currentSelectedFile = value; 
+                        previewBtn.disabled = false;
+                        previewFile(); 
+                    };
+                    ul.appendChild(li);
+                } else {
+                    // 这是子文件夹
+                    const folderDiv = document.createElement('div');
+                    folderDiv.className = 'folder-node';
+                    folderDiv.innerHTML = `<span class="tree-icon">📁</span> ${key}`;
+
+                    // 用于动画的 wrapper 容器
+                    const wrapperDiv = document.createElement('div');
+                    wrapperDiv.className = 'tree-wrapper'; // 默认无 .expanded 状态（折叠）
+
+                    const childUl = buildTreeDOM(value);
+                    childUl.className = 'tree-list inner';
+                    wrapperDiv.appendChild(childUl);
+
+                    // 子文件夹点击事件：切换 expanded 状态
+                    folderDiv.onclick = (e) => {
+                        e.stopPropagation();
+                        wrapperDiv.classList.toggle('expanded');
+                        const isExpanded = wrapperDiv.classList.contains('expanded');
+                        folderDiv.querySelector('.tree-icon').textContent = isExpanded ? '📂' : '📁';
+                    };
+
+                    li.appendChild(folderDiv);
+                    li.appendChild(wrapperDiv);
+                    ul.appendChild(li);
+                }
+            });
+            return ul;
+        }
+        // ============================================================
+
+        async function previewFile() {
+            const fileName = currentSelectedFile;
             const width = widthInput.value;
             const height = heightInput.value;
 
-            if (
-                !fileName ||
-                !width ||
-                !height
-            ) {
+            if (!fileName || !width || !height) {
                 return;
             }
 
             const base = getBasePath();
-
-            const previewUrl =
-                `${base}at.html?file=${encodeURIComponent(fileName)}&width=${width}&height=${height}`;
+            const previewUrl = `${base}at.html?file=${encodeURIComponent(fileName)}&width=${width}&height=${height}`;
 
             previewIframe.src = previewUrl;
 
-            const iframeHtml =
-                `<iframe src="${previewUrl}" width="${width}px" height="${height}px" style="border:0px;"></iframe>`;
+            const iframeHtml = `<iframe src="${previewUrl}" width="${width}px" height="${height}px" style="border:0px;"></iframe>`;
 
             try {
-
-                await navigator.clipboard.writeText(
-                    iframeHtml
-                );
-
-                console.log(
-                    '已自动复制 iframe 标签'
-                );
-
+                await navigator.clipboard.writeText(iframeHtml);
+                console.log('已自动复制 iframe 标签');
             } catch (err) {
-
-                console.error(
-                    '自动复制失败:',
-                    err
-                );
+                console.error('自动复制失败:', err);
             }
         }
 
-        fileSelect.addEventListener(
-            'change',
-            previewFile
-        );
-
-        widthInput.addEventListener(
-            'input',
-            previewFile
-        );
-
-        heightInput.addEventListener(
-            'input',
-            previewFile
-        );
-
-        previewBtn.addEventListener(
-            'click',
-            previewFile
-        );
+        widthInput.addEventListener('input', previewFile);
+        heightInput.addEventListener('input', previewFile);
+        previewBtn.addEventListener('click', previewFile);
 
     </script>
-
 </body>
 
 </html>

@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <title>Oxford B1 Word Board</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: Arial, Helvetica, sans-serif;
+            background: #f5f5f5;
+        }
+
+        header {
+            background: white;
+            padding: 12px;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, .08);
+        }
+
+        .toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+        }
+
+        input,
+        select,
+        button {
+            padding: 6px 10px;
+        }
+
+        .stats {
+            margin-top: 10px;
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            font-size: 14px;
+        }
+
+        .nav {
+            margin-top: 10px;
+        }
+
+        .nav a {
+            margin-right: 8px;
+            text-decoration: none;
+            font-weight: bold;
+        }
+
+        #board {
+            padding: 15px;
+        }
+
+        .letter-group {
+            margin-bottom: 20px;
+        }
+
+        .letter-title {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        .words {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .word {
+            padding: 4px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            border: 1px solid #ddd;
+            font-size: 13px;
+            user-select: none;
+        }
+
+        .word:hover {
+            outline: 2px solid #666;
+        }
+
+        .context-menu {
+            position: fixed;
+            background: white;
+            border: 1px solid #ccc;
+            display: none;
+            z-index: 9999;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, .2);
+        }
+
+        .context-menu div {
+            padding: 8px 12px;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        .context-menu div:hover {
+            background: #eee;
+        }
+    </style>
+</head>
+
+<body>
+
+    <header>
+
+        <div class="toolbar">
+
+            <input id="search" placeholder="搜索单词...">
+
+            <select id="sort">
+
+                <option value="original">原始顺序</option>
+                <option value="az">A-Z</option>
+                <option value="za">Z-A</option>
+                <option value="high">熟悉度高→低</option>
+                <option value="low">熟悉度低→高</option>
+                <option value="recent">最近复习</option>
+                <option value="oldest">最久未复习</option>
+
+            </select>
+
+            <select id="filter">
+
+                <option value="all">全部</option>
+                <option value="new">未见过</option>
+                <option value="low">1-30%</option>
+                <option value="mid">35-65%</option>
+                <option value="high">70-95%</option>
+                <option value="master">100%</option>
+
+            </select>
+
+            <button id="exportBtn">导出</button>
+
+            <button id="importBtn">导入</button>
+
+            <input type="file" id="importFile" style="display:none">
+
+        </div>
+
+        <div class="stats">
+
+            <div id="statTotal"></div>
+            <div id="statSeen"></div>
+            <div id="statMaster"></div>
+            <div id="statAvg"></div>
+
+        </div>
+
+        <div class="nav" id="nav"></div>
+
+    </header>
+
+    <div id="board"></div>
+
+    <div id="menu" class="context-menu">
+        <div data-action="plus">＋5%</div>
+        <div data-action="minus">－5%</div>
+        <div data-action="max">设为100%</div>
+        <div data-action="zero">设为0%</div>
+        <div data-action="detail">查看详情</div>
+    </div>
+
+    <script>
+
+        /* ===========================
+           替换成你的800多个单词
+        =========================== */
+
+        const WORDS = [
+
+            "ability",
+            "accept",
+            "account",
+            "achieve",
+            "across",
+            "action",
+            "activity",
+            "actually",
+            "address",
+            "admit",
+            "adult",
+            "advice",
+            "afford",
+            "afraid",
+            "against",
+            "agency",
+            "agent",
+            "agree",
+            "allow",
+            "almost",
+            "alone",
+            "already",
+            "although",
+            "among",
+            "amount",
+            "ancient",
+            "anger",
+            "angle",
+            "animal",
+            "answer",
+            "anxiety",
+            "apart",
+            "appeal",
+            "appear",
+            "apple",
+            "apply",
+            "argue",
+            "army",
+            "arrive",
+            "artist"
+
+        ];
+
+
+        /* ===========================
+           初始化
+        =========================== */
+
+        let data =
+            JSON.parse(
+                localStorage.getItem("OxfordB1Board")
+            );
+
+        if (!data) {
+
+            data = WORDS.map(
+                (word, index) => ({
+
+                    word,
+                    level: 0,
+                    reviewCount: 0,
+                    lastReview: 0,
+                    originalIndex: index
+
+                })
+            );
+
+        }
+
+        function save() {
+
+            localStorage.setItem(
+                "OxfordB1Board",
+                JSON.stringify(data)
+            );
+
+        }
+
+        function color(level) {
+
+            if (level === 0) return "#ffffff";
+            if (level <= 10) return "#ebf9eb";
+            if (level <= 20) return "#d6f5d6";
+            if (level <= 40) return "#b3ecb3";
+            if (level <= 60) return "#7ee67e";
+            if (level <= 80) return "#4dd24d";
+            if (level < 100) return "#1fb81f";
+
+            return "#006400";
+        }
+
+        function updateStats() {
+
+            const total = data.length;
+
+            const seen =
+                data.filter(x => x.level > 0).length;
+
+            const master =
+                data.filter(x => x.level === 100).length;
+
+            const avg =
+                Math.round(
+                    data.reduce(
+                        (s, x) => s + x.level, 0
+                    ) / total
+                );
+
+            statTotal.textContent =
+                "总词数：" + total;
+
+            statSeen.textContent =
+                "已见过：" + seen;
+
+            statMaster.textContent =
+                "掌握：" + master;
+
+            statAvg.textContent =
+                "平均熟悉度：" + avg + "%";
+        }
+
+        function getFilteredData() {
+
+            let arr = [...data];
+
+            const keyword =
+                search.value.trim().toLowerCase();
+
+            if (keyword) {
+
+                arr =
+                    arr.filter(
+                        x => x.word.toLowerCase()
+                            .includes(keyword)
+                    );
+
+            }
+
+            switch (filter.value) {
+
+                case "new":
+                    arr = arr.filter(x => x.level === 0);
+                    break;
+
+                case "low":
+                    arr = arr.filter(
+                        x => x.level > 0 && x.level <= 30);
+                    break;
+
+                case "mid":
+                    arr = arr.filter(
+                        x => x.level >= 35 && x.level <= 65);
+                    break;
+
+                case "high":
+                    arr = arr.filter(
+                        x => x.level >= 70 && x.level < 100);
+                    break;
+
+                case "master":
+                    arr = arr.filter(
+                        x => x.level === 100);
+                    break;
+            }
+
+            switch (sort.value) {
+
+                case "az":
+                    arr.sort(
+                        (a, b) => a.word.localeCompare(b.word));
+                    break;
+
+                case "za":
+                    arr.sort(
+                        (a, b) => b.word.localeCompare(a.word));
+                    break;
+
+                case "high":
+                    arr.sort(
+                        (a, b) => b.level - a.level);
+                    break;
+
+                case "low":
+                    arr.sort(
+                        (a, b) => a.level - b.level);
+                    break;
+
+                case "recent":
+                    arr.sort(
+                        (a, b) => b.lastReview - a.lastReview);
+                    break;
+
+                case "oldest":
+                    arr.sort(
+                        (a, b) => a.lastReview - b.lastReview);
+                    break;
+
+                default:
+                    arr.sort(
+                        (a, b) =>
+                            a.originalIndex - b.originalIndex);
+            }
+
+            return arr;
+        }
+
+        function render() {
+
+            updateStats();
+
+            const board =
+                document.getElementById("board");
+
+            board.innerHTML = "";
+
+            const arr =
+                getFilteredData();
+
+            const groups = {};
+
+            arr.forEach(item => {
+
+                const letter =
+                    item.word[0]
+                        .toUpperCase();
+
+                if (!groups[letter])
+                    groups[letter] = [];
+
+                groups[letter].push(item);
+
+            });
+
+            nav.innerHTML = "";
+
+            Object.keys(groups)
+                .sort()
+                .forEach(letter => {
+
+                    const link =
+                        document.createElement("a");
+
+                    link.href = "#group_" + letter;
+
+                    link.textContent = letter;
+
+                    nav.appendChild(link);
+
+                    const group =
+                        document.createElement("div");
+
+                    group.className =
+                        "letter-group";
+
+                    group.id =
+                        "group_" + letter;
+
+                    group.innerHTML =
+                        `<div class="letter-title">${letter}</div>`;
+
+                    const words =
+                        document.createElement("div");
+
+                    words.className =
+                        "words";
+
+                    groups[letter]
+                        .forEach(item => {
+
+                            const div =
+                                document.createElement("div");
+
+                            div.className =
+                                "word";
+
+                            div.textContent =
+                                item.word;
+
+                            div.style.background =
+                                color(item.level);
+
+                            div.title =
+                                item.level + "%";
+
+                            div.dataset.word =
+                                item.word;
+
+                            words.appendChild(div);
+
+                        });
+
+                    group.appendChild(words);
+
+                    board.appendChild(group);
+
+                });
+
+        }
+
+        let currentWord = null;
+
+        document.addEventListener(
+            "contextmenu",
+            e => {
+
+                const word =
+                    e.target.closest(".word");
+
+                if (!word) return;
+
+                e.preventDefault();
+
+                currentWord =
+                    data.find(
+                        x => x.word === word.dataset.word);
+
+                menu.style.left =
+                    e.pageX + "px";
+
+                menu.style.top =
+                    e.pageY + "px";
+
+                menu.style.display =
+                    "block";
+
+            });
+
+        document.addEventListener(
+            "click",
+            () => {
+                menu.style.display = "none";
+            });
+
+        menu.addEventListener(
+            "click",
+            e => {
+
+                const action =
+                    e.target.dataset.action;
+
+                if (!action || !currentWord)
+                    return;
+
+                switch (action) {
+
+                    case "plus":
+                        currentWord.level =
+                            Math.min(
+                                currentWord.level + 5,
+                                100
+                            );
+
+                        currentWord.reviewCount++;
+
+                        currentWord.lastReview =
+                            Date.now();
+
+                        break;
+
+                    case "minus":
+                        currentWord.level =
+                            Math.max(
+                                currentWord.level - 5,
+                                0
+                            );
+                        break;
+
+                    case "max":
+                        currentWord.level = 100;
+                        break;
+
+                    case "zero":
+                        currentWord.level = 0;
+                        break;
+
+                    case "detail":
+
+                        alert(
+                            "单词: " + currentWord.word + "\n\n" +
+                            "熟悉度: " + currentWord.level + "%\n" +
+                            "记录次数: " + currentWord.reviewCount + "\n" +
+                            "最后复习: " +
+                            (
+                                currentWord.lastReview
+                                    ?
+                                    new Date(
+                                        currentWord.lastReview
+                                    ).toLocaleString()
+                                    :
+                                    "从未"
+                            )
+                        );
+
+                        return;
+                }
+
+                save();
+
+                render();
+
+            });
+
+        search.addEventListener(
+            "input",
+            render
+        );
+
+        sort.addEventListener(
+            "change",
+            render
+        );
+
+        filter.addEventListener(
+            "change",
+            render
+        );
+
+        exportBtn.onclick = () => {
+
+            const blob =
+                new Blob(
+                    [
+                        JSON.stringify(
+                            data,
+                            null,
+                            2
+                        )
+                    ],
+                    {
+                        type:
+                            "application/json"
+                    }
+                );
+
+            const a =
+                document.createElement("a");
+
+            a.href =
+                URL.createObjectURL(blob);
+
+            a.download =
+                "OxfordB1Board.json";
+
+            a.click();
+
+        };
+
+        importBtn.onclick = () => {
+
+            importFile.click();
+
+        };
+
+        importFile.onchange = e => {
+
+            const file =
+                e.target.files[0];
+
+            if (!file) return;
+
+            const reader =
+                new FileReader();
+
+            reader.onload = () => {
+
+                try {
+
+                    data =
+                        JSON.parse(
+                            reader.result
+                        );
+
+                    save();
+
+                    render();
+
+                    alert("导入成功");
+
+                } catch {
+
+                    alert("文件格式错误");
+
+                }
+
+            };
+
+            reader.readAsText(file);
+
+        };
+
+        render();
+
+    </script>
+
+</body>
+
+</html>
