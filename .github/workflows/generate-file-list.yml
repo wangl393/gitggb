@@ -21,7 +21,10 @@ jobs:
 
       - name: Generate file list and inject into index.html
         run: |
-          FILES_JSON=$(find ggbfiles -maxdepth 1 -name "*.ggb" -printf '%f\n' \
+          # 1. 递归查找 ggbfiles 下的所有 .ggb 文件
+          # -type f: 仅匹配文件
+          # -printf '%P\n': 去掉 'ggbfiles/' 前缀，保留相对路径（如 "folder/file.ggb"）
+          FILES_JSON=$(find ggbfiles -type f -name "*.ggb" -printf '%P\n' \
             | sort \
             | jq -R . \
             | jq -s -c .)
@@ -29,6 +32,7 @@ jobs:
           echo "Generated:"
           echo "$FILES_JSON"
 
+          # 2. 替换 index.html 里的 GGB_FILES 变量
           sed -i \
             "s|const GGB_FILES = .*;|const GGB_FILES = $FILES_JSON;|g" \
             index.html
