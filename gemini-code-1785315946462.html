@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GGB 13一键预览工具 (本地Server版)</title>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: Arial, sans-serif;
+        }
+
+        body {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            padding: 10px;
+            gap: 0;
+            background: #f0f2f5;
+            overflow: hidden;
+        }
+
+        /* 上部 GGB 预览区：占据剩余全部高度 */
+        .preview-area {
+            flex: 1;
+            border: 1px solid #ccc;
+            border-radius: 8px 8px 0 0;
+            overflow: hidden;
+            background: #fff;
+            min-height: 0;
+        }
+
+        #preview-iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+            display: block;
+        }
+
+        /* 栏间隐蔽式微型折叠条 */
+        #toggle-bar {
+            height: 12px;
+            background: #e4e7ed;
+            border-left: 1px solid #ccc;
+            border-right: 1px solid #ccc;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s ease;
+            user-select: none;
+            z-index: 10;
+            flex-shrink: 0;
+        }
+
+        #toggle-bar:hover {
+            background: #007bff;
+        }
+
+        .toggle-icon {
+            width: 38px;
+            height: 10px;
+            background: #fff;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 8px;
+            color: #666;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+            transition: all 0.2s ease;
+            line-height: 1;
+        }
+
+        #toggle-bar:hover .toggle-icon {
+            color: #007bff;
+            background: #ffffff;
+            transform: scale(1.1);
+        }
+
+        /* 下部控制区：高度大幅压缩变窄 */
+        .control-area {
+            height: 95px; /* 将原本的 155px 修改为 95px，使面板更窄 */
+            display: flex;
+            flex-direction: row;
+            gap: 15px;
+            padding: 10px 15px;
+            border: 1px solid #ccc;
+            border-top: none;
+            border-radius: 0 0 8px 8px;
+            background: #f9f9f9;
+            transition: all 0.3s cubic-bezier(0.25, 1, 0.5, 1);
+            overflow: hidden;
+            flex-shrink: 0;
+        }
+
+        body.panel-collapsed .control-area {
+            height: 0;
+            padding-top: 0;
+            padding-bottom: 0;
+            border-bottom: none;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        body.panel-collapsed .preview-area {
+            border-radius: 8px 8px 0 0;
+        }
+
+        body.panel-collapsed #toggle-bar {
+            border-radius: 0 0 8px 8px;
+            border-bottom: 1px solid #ccc;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .compact-group {
+            width: 190px;
+            flex-shrink: 0;
+        }
+
+        .control-group.file-list-group {
+            flex: 1;
+            min-width: 0;
+            overflow: hidden; /* 防止溢出破坏外部 flex */
+        }
+
+        .settings-group {
+            width: 220px;
+            flex-shrink: 0;
+            justify-content: space-between;
+        }
+
+        .input-row {
+            display: flex;
+            gap: 10px;
+        }
+
+        .input-item {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        label {
+            font-weight: 600;
+            color: #333;
+            font-size: 13px;
+        }
+
+        select,
+        input,
+        button {
+            padding: 6px 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+            transition: background 0.2s;
+            font-weight: 500;
+        }
+
+        button:hover {
+            background: #0056b3;
+        }
+
+        button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+
+        #folder-select {
+            background: #28a745;
+        }
+
+        #folder-select:hover {
+            background: #218838;
+        }
+
+        /* 文件列表区域：完全改为横向排布、横向滑动 */
+        .file-list-container {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            overflow-x: auto;  /* 开启横向滚动 */
+            overflow-y: hidden; /* 彻底关闭竖向滚动 */
+            white-space: nowrap; /* 强制不换行 */
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            background: #fff;
+            padding: 0 10px;
+            gap: 15px; /* 不同文件夹之间的间距 */
+        }
+
+        /* 定制横向滚动条样式 */
+        .file-list-container::-webkit-scrollbar {
+            height: 6px;
+        }
+        .file-list-container::-webkit-scrollbar-thumb {
+            background-color: #cbd3da;
+            border-radius: 3px;
+        }
+        .file-list-container::-webkit-scrollbar-thumb:hover {
+            background-color: #a0a8b1;
+        }
+
+        /* 文件夹块横向 */
+        .folder-block {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            border-right: 1px solid #eee;
+            padding-right: 15px;
+            flex-shrink: 0; /* 禁止挤压 */
+        }
+
+        .folder-block:last-child {
+            border-right: none;
+            padding-right: 0;
+        }
+
+        .folder-title {
+            font-weight: bold;
+            font-size: 12px;
+            color: #495057;
+            padding: 3px 6px;
+            background: #e9ecef;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            flex-shrink: 0;
+        }
+
+        .file-item {
+            padding: 4px 8px;
+            font-size: 12px;
+            color: #333;
+            border-radius: 4px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.15s ease;
+            flex-shrink: 0;
+        }
+
+        .file-item:hover {
+            background: #e7f3ff;
+            color: #007bff;
+        }
+
+        .file-item.active {
+            background: #007bff;
+            color: white;
+            font-weight: 500;
+        }
+
+        .empty-tip {
+            color: #888;
+            font-size: 12px;
+            text-align: center;
+            width: 100%;
+        }
+
+        .tip {
+            font-size: 11px;
+            color: #666;
+            line-height: 1.3;
+        }
+
+        .error-tip {
+            color: #dc3545;
+            font-weight: 500;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="preview-area">
+        <iframe id="preview-iframe" src="about:blank"></iframe>
+    </div>
+
+    <div id="toggle-bar" title="折叠/展开底部面板">
+        <div class="toggle-icon">▼</div>
+    </div>
+
+    <div class="control-area" id="control-area">
+
+        <div class="control-group compact-group">
+            <button id="folder-select">刷新文件列表</button>
+            <div class="tip">
+                自动递归扫描 <strong>ggbfiles</strong> 及其所有子文件夹
+            </div>
+            <div id="folder-error" class="tip error-tip" style="display:none;"></div>
+        </div>
+
+        <div class="control-group file-list-group">
+            <label>文件列表 <span id="file-count" class="tip" style="font-weight: normal; margin-left: 5px;"></span></label>
+            <div id="file-list-container" class="file-list-container">
+                <div class="empty-tip">正在初始化...</div>
+            </div>
+        </div>
+
+        <div class="control-group settings-group">
+            <div class="input-row">
+                <div class="input-item">
+                    <label for="width-input">宽度</label>
+                    <input type="number" id="width-input" value="2000" min="100">
+                </div>
+                <div class="input-item">
+                    <label for="height-input">高度</label>
+                    <input type="number" id="height-input" value="920" min="100">
+                </div>
+            </div>
+
+            <button id="preview-btn" disabled>
+                复制当前预览链接
+            </button>
+        </div>
+
+    </div>
+
+    <script>
+        const widthInput = document.getElementById('width-input');
+        const heightInput = document.getElementById('height-input');
+        const previewBtn = document.getElementById('preview-btn');
+        const previewIframe = document.getElementById('preview-iframe');
+        const fileCount = document.getElementById('file-count');
+        const folderError = document.getElementById('folder-error');
+        const folderSelectBtn = document.getElementById('folder-select');
+        const fileListContainer = document.getElementById('file-list-container');
+        const toggleBar = document.getElementById('toggle-bar');
+        const toggleIcon = toggleBar.querySelector('.toggle-icon');
+
+        let currentSelectedPath = ''; 
+
+        toggleBar.addEventListener('click', () => {
+            const isCollapsed = document.body.classList.toggle('panel-collapsed');
+            toggleIcon.textContent = isCollapsed ? '▲' : '▼';
+            toggleBar.title = isCollapsed ? '展开底部面板' : '折叠底部面板';
+        });
+
+        folderSelectBtn.onclick = loadGgbFiles;
+        window.addEventListener('DOMContentLoaded', loadGgbFiles);
+
+        function getBasePath() {
+            const path = window.location.pathname;
+            const dir = path.substring(0, path.lastIndexOf('/') + 1);
+            return window.location.origin + dir;
+        }
+
+        async function scanDirectory() {
+            const visited = new Set();
+            const allFiles = [];
+            const rootDirUrl = new URL('ggbfiles/', window.location.href);
+
+            async function crawl(currentUrl) {
+                const urlString = currentUrl.origin + currentUrl.pathname;
+                if (visited.has(urlString)) return;
+                visited.add(urlString);
+
+                try {
+                    const response = await fetch(currentUrl.href);
+                    if (!response.ok) return;
+
+                    const htmlText = await response.text();
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(htmlText, 'text/html');
+                    const links = doc.querySelectorAll('a');
+
+                    for (const link of links) {
+                        const rawHref = link.getAttribute('href');
+                        if (!rawHref || rawHref.startsWith('#') || rawHref.startsWith('javascript:')) continue;
+
+                        let absoluteUrl;
+                        try {
+                            absoluteUrl = new URL(rawHref, currentUrl);
+                        } catch (e) {
+                            continue;
+                        }
+
+                        if (absoluteUrl.origin !== window.location.origin) continue;
+                        if (!absoluteUrl.pathname.startsWith(rootDirUrl.pathname)) continue;
+
+                        const pathName = decodeURIComponent(absoluteUrl.pathname);
+
+                        if (pathName.toLowerCase().endsWith('.ggb')) {
+                            const relativePath = pathName.substring(rootDirUrl.pathname.length);
+                            const pathParts = relativePath.split('/').filter(Boolean);
+                            const fileName = pathParts.pop();
+                            const folderPath = pathParts.join('/') || '根目录 (ggbfiles)';
+
+                            allFiles.push({
+                                fileName: fileName,
+                                filePath: relativePath,
+                                folder: folderPath
+                            });
+                        } 
+                        else {
+                            const isDir = rawHref.endsWith('/') || 
+                                          link.textContent.trim().endsWith('/') || 
+                                          !pathName.split('/').pop().includes('.');
+
+                            if (isDir && absoluteUrl.pathname.startsWith(currentUrl.pathname) && absoluteUrl.pathname !== currentUrl.pathname) {
+                                const subDirUrl = new URL(absoluteUrl.pathname.endsWith('/') ? absoluteUrl.pathname : absoluteUrl.pathname + '/', absoluteUrl.origin);
+                                await crawl(subDirUrl);
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.error('扫描目录出错:', currentUrl.href, e);
+                }
+            }
+
+            await crawl(rootDirUrl);
+            return allFiles;
+        }
+
+        async function loadGgbFiles() {
+            fileListContainer.innerHTML = '<div class="empty-tip">正在扫描文件夹...</div>';
+            previewBtn.disabled = true;
+            folderError.style.display = 'none';
+
+            try {
+                const rawFiles = await scanDirectory();
+                const uniqueFiles = [];
+                const seen = new Set();
+                for (const file of rawFiles) {
+                    if (!seen.has(file.filePath)) {
+                        seen.add(file.filePath);
+                        uniqueFiles.push(file);
+                    }
+                }
+                updateFileListView(uniqueFiles);
+            } catch (error) {
+                console.error(error);
+                fileListContainer.innerHTML = '<div class="empty-tip">加载失败</div>';
+                folderError.textContent = '无法自动读取，请检查 Live Server 是否正常运行，且 ggbfiles 文件夹是否存在';
+                folderError.style.display = 'block';
+                fileCount.textContent = '';
+            }
+        }
+
+        function updateFileListView(files) {
+            fileListContainer.innerHTML = '';
+
+            if (!files || files.length === 0) {
+                fileListContainer.innerHTML = '<div class="empty-tip">ggbfiles 文件夹及子文件夹中未找到 .ggb 文件</div>';
+                fileCount.textContent = '(共 0 个文件)';
+                previewBtn.disabled = true;
+                return;
+            }
+
+            const grouped = {};
+            files.forEach(file => {
+                const folderKey = file.folder;
+                if (!grouped[folderKey]) {
+                    grouped[folderKey] = [];
+                }
+                grouped[folderKey].push(file);
+            });
+
+            const folderKeys = Object.keys(grouped).sort((a, b) => {
+                if (a.startsWith('根目录')) return -1;
+                if (b.startsWith('根目录')) return 1;
+                return a.localeCompare(b, 'zh-Hans-CN', { sensitivity: 'accent' });
+            });
+
+            let totalFilesCount = 0;
+            let firstFileItem = null;
+
+            folderKeys.forEach(folderName => {
+                const folderFiles = grouped[folderName];
+                totalFilesCount += folderFiles.length;
+
+                folderFiles.sort((a, b) => a.fileName.localeCompare(b.fileName, 'zh-Hans-CN', { sensitivity: 'accent' }));
+
+                const folderBlock = document.createElement('div');
+                folderBlock.className = 'folder-block';
+
+                const folderTitle = document.createElement('div');
+                folderTitle.className = 'folder-title';
+                folderTitle.innerHTML = `📁 ${folderName}`;
+                folderBlock.appendChild(folderTitle);
+
+                folderFiles.forEach(file => {
+                    const fileItem = document.createElement('div');
+                    fileItem.className = 'file-item';
+                    fileItem.dataset.path = file.filePath;
+                    fileItem.innerHTML = `📄 ${file.fileName}`;
+
+                    fileItem.addEventListener('click', () => {
+                        selectFile(fileItem, file.filePath);
+                    });
+
+                    folderBlock.appendChild(fileItem);
+
+                    if (!firstFileItem) {
+                        firstFileItem = { element: fileItem, path: file.filePath };
+                    }
+                });
+
+                fileListContainer.appendChild(folderBlock);
+            });
+
+            fileCount.textContent = `(共 ${totalFilesCount} 个文件)`;
+            previewBtn.disabled = false;
+
+            if (firstFileItem) {
+                selectFile(firstFileItem.element, firstFileItem.path);
+            }
+            
+            // 每次渲染完毕，确保横向滚动条归零（回到最左侧）
+            fileListContainer.scrollLeft = 0;
+        }
+
+        function selectFile(element, filePath) {
+            const allItems = document.querySelectorAll('.file-item');
+            allItems.forEach(item => item.classList.remove('active'));
+
+            element.classList.add('active');
+            currentSelectedPath = filePath;
+
+            // 如果被点击的文件超出横向可视区域，自动向中间滚动
+            element.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+
+            previewFile();
+        }
+
+        async function previewFile() {
+            if (!currentSelectedPath) return;
+
+            const width = widthInput.value;
+            const height = heightInput.value;
+
+            if (!width || !height) return;
+
+            const base = getBasePath();
+            const previewUrl = `${base}at.html?file=${encodeURIComponent(currentSelectedPath)}&width=${width}&height=${height}`;
+
+            previewIframe.src = previewUrl;
+
+            const iframeHtml = `<iframe src="${previewUrl}" width="${width}px" height="${height}px" style="border:0px;"></iframe>`;
+
+            try {
+                await navigator.clipboard.writeText(iframeHtml);
+                console.log('已自动复制 iframe 标签');
+            } catch (err) {
+                console.error('自动复制失败:', err);
+            }
+        }
+
+        widthInput.addEventListener('input', previewFile);
+        heightInput.addEventListener('input', previewFile);
+        previewBtn.addEventListener('click', previewFile);
+    </script>
+</body>
+
+</html>
