@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GGB 13一键预览工具 (支持平滑子目录)</title>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: Arial, sans-serif;
+        }
+
+        body {
+            display: flex;
+            height: 100vh;
+            padding: 20px;
+            gap: 20px;
+        }
+
+        .preview-area {
+            flex: 1;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        #preview-iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+
+        .control-area {
+            width: 350px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            padding: 20px;
+            border: 1px solid #eee;
+            border-radius: 8px;
+            background: #f9f9f9;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        label {
+            font-weight: 600;
+            color: #333;
+        }
+
+        input,
+        button {
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        button:hover {
+            background: #0056b3;
+        }
+
+        button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+
+        #folder-select {
+            background: #28a745;
+        }
+
+        #folder-select:hover {
+            background: #218838;
+        }
+
+        .tip {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .error-tip {
+            color: #dc3545;
+            font-weight: 500;
+        }
+
+        /* ================= 文件树视图 & 平滑折叠动画样式 ================= */
+        #file-tree-container {
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            max-height: 400px;
+            overflow-y: auto;
+            background: #fff;
+            padding: 10px;
+            font-size: 14px;
+        }
+
+        ul.tree-list {
+            list-style: none;
+            padding-left: 20px;
+            margin: 0;
+        }
+
+        ul.tree-list.root-list {
+            padding-left: 0;
+        }
+
+        .tree-wrapper {
+            display: grid;
+            grid-template-rows: 0fr;
+            transition: grid-template-rows 0.3s ease-in-out;
+        }
+
+        .tree-wrapper.expanded {
+            grid-template-rows: 1fr;
+        }
+
+        .tree-list.inner {
+            min-height: 0; 
+            overflow: hidden;
+        }
+
+        .folder-node, .file-node {
+            cursor: pointer;
+            padding: 6px 8px;
+            user-select: none;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            transition: background-color 0.1s;
+        }
+
+        .folder-node:hover, .file-node:hover {
+            background-color: #f1f3f5;
+        }
+
+        .file-node.selected {
+            background-color: #e7f1ff;
+            color: #0056b3;
+            font-weight: bold;
+        }
+
+        .tree-icon {
+            margin-right: 6px;
+            font-size: 14px;
+            width: 18px;
+            text-align: center;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="preview-area">
+        <iframe id="preview-iframe" src="about:blank"></iframe>
+    </div>
+
+    <div class="control-area">
+
+        <div class="control-group">
+            <button id="folder-select">刷新文件列表</button>
+            <div class="tip">
+                自动读取 <strong>ggbfiles</strong> 文件夹中的 .ggb 文件（支持子文件夹）
+            </div>
+            <div id="folder-error" class="tip error-tip" style="display:none;">
+            </div>
+        </div>
+
+        <div class="control-group">
+            <label>选择 GGB 文件</label>
+            <div id="file-tree-container">
+                <div style="color: #666;">正在初始化...</div>
+            </div>
+            <div id="file-count" class="tip"></div>
+        </div>
+
+        <div class="control-group">
+            <label for="width-input">宽度</label>
+            <input type="number" id="width-input" value="819" min="100">
+        </div>
+
+        <div class="control-group">
+            <label for="height-input">高度</label>
+            <input type="number" id="height-input" value="590" min="100">
+        </div>
+
+        <button id="preview-btn" disabled>
+            预览并复制链接
+        </button>
+
+    </div>
+
+    <script>
+        // ==========================================
+        // GitHub Action 自动替换这里
+        // ==========================================
+        const GGB_FILES = ["024.ggb","0616三角旋转.ggb","155.ggb","ggggg.ggb","kuku.ggb","shown.ggb","slow.ggb","全等三角形/三角形全等-1个条件 - 一角.ggb","全等三角形/三角形全等-1个条件-一边.ggb","全等三角形/三角形全等-2个条件-1两边.ggb","全等三角形/三角形全等-2个条件-2两角.ggb","全等三角形/三角形全等-2个条件-3一边邻一角.ggb","全等三角形/三角形全等-2个条件-4一边对一角.ggb","全等三角形/三角形全等-3个条件-0SSS.ggb","全等三角形/三角形全等-3个条件-1SAS.ggb","全等三角形/三角形全等-3个条件-2边边角.ggb","全等三角形/三角形全等-3个条件-3ASA-.ggb","全等三角形/三角形全等-3个条件-3ASA.ggb","全等三角形/三角形全等-3个条件-4AAS.ggb","全等三角形/三角形全等-3个条件-5HLA特殊边边角 - 副本.ggb","全等三角形/三角形全等.ggb","全等三角形/边角关系.ggb"];
+        // 例如：
+        // const GGB_FILES = ["024.ggb","0616三角旋转.ggb","155.ggb","ggggg.ggb","kuku.ggb","shown.ggb","slow.ggb","全等三角形/三角形全等-1个条件 - 一角.ggb","全等三角形/三角形全等-1个条件-一边.ggb","全等三角形/三角形全等-2个条件-1两边.ggb","全等三角形/三角形全等-2个条件-2两角.ggb","全等三角形/三角形全等-2个条件-3一边邻一角.ggb","全等三角形/三角形全等-2个条件-4一边对一角.ggb","全等三角形/三角形全等-3个条件-0SSS.ggb","全等三角形/三角形全等-3个条件-1SAS.ggb","全等三角形/三角形全等-3个条件-2边边角.ggb","全等三角形/三角形全等-3个条件-3ASA-.ggb","全等三角形/三角形全等-3个条件-3ASA.ggb","全等三角形/三角形全等-3个条件-4AAS.ggb","全等三角形/三角形全等-3个条件-5HLA特殊边边角 - 副本.ggb","全等三角形/三角形全等.ggb","全等三角形/边角关系.ggb"];
+        // ==========================================
+
+        let currentSelectedFile = ""; 
+
+        const fileTreeContainer = document.getElementById('file-tree-container');
+        const widthInput = document.getElementById('width-input');
+        const heightInput = document.getElementById('height-input');
+        const previewBtn = document.getElementById('preview-btn');
+        const previewIframe = document.getElementById('preview-iframe');
+        const fileCount = document.getElementById('file-count');
+        const folderError = document.getElementById('folder-error');
+        const folderSelectBtn = document.getElementById('folder-select');
+
+        folderSelectBtn.onclick = loadGgbFiles;
+
+        window.addEventListener('DOMContentLoaded', loadGgbFiles);
+
+        function getBasePath() {
+            const path = window.location.pathname;
+            const dir = path.substring(0, path.lastIndexOf('/') + 1);
+            return window.location.origin + dir;
+        }
+
+        function loadGgbFiles() {
+            fileTreeContainer.innerHTML = '<div style="color: #666;">正在加载文件列表...</div>';
+            previewBtn.disabled = true;
+            folderError.style.display = 'none';
+
+            try {
+                updateTreeMenu(GGB_FILES);
+            } catch (error) {
+                console.error(error);
+                fileTreeContainer.innerHTML = '<div style="color: #dc3545;">加载失败</div>';
+                folderError.textContent = '文件列表初始化失败';
+                folderError.style.display = 'block';
+                fileCount.textContent = '';
+            }
+        }
+
+        function updateTreeMenu(files) {
+            fileTreeContainer.innerHTML = '';
+
+            if (!files || files.length === 0) {
+                fileTreeContainer.innerHTML = '<div style="color: #666;">ggbfiles 文件夹中没有 .ggb 文件</div>';
+                fileCount.textContent = '共找到 0 个文件';
+                return;
+            }
+
+            // 1. 根据路径数组生成对象树结构
+            const tree = {};
+            files.forEach(path => {
+                // 如果 GitHub Action 返回了包含反斜杠 \ 的路径（如 Windows 路径），统一转换为斜杠 /
+                const normalizedPath = path.replace(/\\/g, '/');
+                const parts = normalizedPath.split('/');
+                let current = tree;
+                for (let i = 0; i < parts.length; i++) {
+                    const part = parts[i];
+                    if (i === parts.length - 1) {
+                        current[part] = normalizedPath; 
+                    } else {
+                        if (!current[part]) current[part] = {}; 
+                        current = current[part];
+                    }
+                }
+            });
+
+            // 2. 渲染 DOM
+            const rootUl = document.createElement('ul');
+            rootUl.className = 'tree-list root-list';
+            const rootLi = document.createElement('li');
+            
+            const rootFolderDiv = document.createElement('div');
+            rootFolderDiv.className = 'folder-node';
+            rootFolderDiv.innerHTML = '<span class="tree-icon">📁</span> ggbfiles 根目录';
+            
+            const rootWrapper = document.createElement('div');
+            rootWrapper.className = 'tree-wrapper'; 
+
+            const childrenUl = buildTreeDOM(tree);
+            childrenUl.className = 'tree-list inner';
+            rootWrapper.appendChild(childrenUl);
+
+            rootFolderDiv.onclick = (e) => {
+                e.stopPropagation();
+                rootWrapper.classList.toggle('expanded');
+                const isExpanded = rootWrapper.classList.contains('expanded');
+                rootFolderDiv.querySelector('.tree-icon').textContent = isExpanded ? '📂' : '📁';
+            };
+
+            rootLi.appendChild(rootFolderDiv);
+            rootLi.appendChild(rootWrapper);
+            rootUl.appendChild(rootLi);
+
+            fileTreeContainer.appendChild(rootUl);
+            fileCount.textContent = `共读取到 ${files.length} 个文件`;
+        }
+
+        function buildTreeDOM(treeNode) {
+            const ul = document.createElement('ul');
+
+            const keys = Object.keys(treeNode).sort((a, b) => {
+                const isFolderA = typeof treeNode[a] === 'object';
+                const isFolderB = typeof treeNode[b] === 'object';
+                if (isFolderA && !isFolderB) return -1;
+                if (!isFolderA && isFolderB) return 1;
+                return a.localeCompare(b, 'zh-CN');
+            });
+
+            keys.forEach(key => {
+                const value = treeNode[key];
+                const li = document.createElement('li');
+
+                if (typeof value === 'string') {
+                    li.className = 'file-node';
+                    li.innerHTML = `<span class="tree-icon">📄</span> ${key}`;
+                    
+                    li.onclick = (e) => {
+                        e.stopPropagation();
+                        document.querySelectorAll('.file-node').forEach(el => el.classList.remove('selected'));
+                        li.classList.add('selected');
+                        
+                        currentSelectedFile = value; 
+                        previewBtn.disabled = false;
+                        previewFile(); 
+                    };
+                    ul.appendChild(li);
+                } else {
+                    const folderDiv = document.createElement('div');
+                    folderDiv.className = 'folder-node';
+                    folderDiv.innerHTML = `<span class="tree-icon">📁</span> ${key}`;
+
+                    const wrapperDiv = document.createElement('div');
+                    wrapperDiv.className = 'tree-wrapper'; 
+
+                    const childUl = buildTreeDOM(value);
+                    childUl.className = 'tree-list inner';
+                    wrapperDiv.appendChild(childUl);
+
+                    folderDiv.onclick = (e) => {
+                        e.stopPropagation();
+                        wrapperDiv.classList.toggle('expanded');
+                        const isExpanded = wrapperDiv.classList.contains('expanded');
+                        folderDiv.querySelector('.tree-icon').textContent = isExpanded ? '📂' : '📁';
+                    };
+
+                    li.appendChild(folderDiv);
+                    li.appendChild(wrapperDiv);
+                    ul.appendChild(li);
+                }
+            });
+            return ul;
+        }
+
+        async function previewFile() {
+            const fileName = currentSelectedFile;
+            const width = widthInput.value;
+            const height = heightInput.value;
+
+            if (!fileName || !width || !height) {
+                return;
+            }
+
+            const base = getBasePath();
+            const previewUrl = `${base}at.html?file=${encodeURIComponent(fileName)}&width=${width}&height=${height}`;
+
+            previewIframe.src = previewUrl;
+
+            const iframeHtml = `<iframe src="${previewUrl}" width="${width}px" height="${height}px" style="border:0px;"></iframe>`;
+
+            try {
+                await navigator.clipboard.writeText(iframeHtml);
+                console.log('已自动复制 iframe 标签');
+            } catch (err) {
+                console.error('自动复制失败:', err);
+            }
+        }
+
+        widthInput.addEventListener('input', previewFile);
+        heightInput.addEventListener('input', previewFile);
+        previewBtn.addEventListener('click', previewFile);
+
+    </script>
+</body>
+
+</html>

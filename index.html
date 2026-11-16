@@ -366,7 +366,7 @@
             return ul;
         }
 
-        async function previewFile() {
+        function previewFile() {
             const fileName = currentSelectedFile;
             const width = widthInput.value;
             const height = heightInput.value;
@@ -376,11 +376,25 @@
             }
 
             const base = getBasePath();
+            // 预览用的 URL 保持编码，保证 iframe 加载稳定
             const previewUrl = `${base}at.html?file=${encodeURIComponent(fileName)}&width=${width}&height=${height}`;
 
             previewIframe.src = previewUrl;
+        }
 
-            const iframeHtml = `<iframe src="${previewUrl}" width="${width}px" height="${height}px" style="border:0px;"></iframe>`;
+        async function copyCurrentLink() {
+            const fileName = currentSelectedFile;
+            const width = widthInput.value;
+            const height = heightInput.value;
+
+            if (!fileName || !width || !height) {
+                return;
+            }
+
+            const base = getBasePath();
+            // 复制到剪贴板的链接：file 参数还原为可读中文路径（仅路径，不动 & = 等分隔符）
+            const readableUrl = `${base}at.html?file=${fileName}&width=${width}&height=${height}`;
+            const iframeHtml = `<iframe src="${readableUrl}" width="${width}px" height="${height}px" style="border:0px;"></iframe>`;
 
             try {
                 await navigator.clipboard.writeText(iframeHtml);
@@ -392,7 +406,7 @@
 
         widthInput.addEventListener('input', previewFile);
         heightInput.addEventListener('input', previewFile);
-        previewBtn.addEventListener('click', previewFile);
+        previewBtn.addEventListener('click', copyCurrentLink);
 
     </script>
 </body>
