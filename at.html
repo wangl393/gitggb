@@ -6,6 +6,36 @@
     <meta charset="utf-8" />
     <script src="GeoGebra/deployggb.js"></script>
     <style>
+        /*
+         * 让页面与 iframe 视口严丝合缝。
+         *
+         * 这两条是"内嵌到别的页面后出现竖向滚动条"的根因：
+         * body 默认有 8px 外边距，于是文档高度 = 8 + 画布高 + 8；
+         * 而 GeoGebra 自动缩放只把画布压到"容器高 − Δ"（Δ 随高度增长），
+         * 高度较小时（实测 < 390px）Δ < 16，多出来的十几像素就撑出了滚动条。
+         *
+         * 改完的直接效果：
+         *   1. 任何尺寸都不再有页面级滚动条（overflow: hidden 兜底）；
+         *   2. 画布比原来更大一点：450×200 时由 432×192 变成 450×200，
+         *      819×590 时由 781×563 变成 819×590 —— 原来被外边距和
+         *      自动缩放占掉的 18×8 / 38×27 px 现在都还给了画布。
+         */
+        html,
+        body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #fff;
+        }
+
+        /* 画布容器铺满视口，交给 GeoGebra 自己按容器大小排版 */
+        #ggbApplet {
+            width: 100%;
+            height: 100%;
+        }
+
         .GeoGebraFrame {
             border: 0 !important;
             background: #fff !important;
