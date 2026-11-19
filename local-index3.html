@@ -108,6 +108,22 @@
             background: #218838;
         }
 
+        /* 底部两个复制按钮并排，各占一半宽度 */
+        .button-row {
+            display: flex;
+            gap: 10px;
+        }
+
+        .button-row > button {
+            flex: 1;
+            white-space: nowrap;
+        }
+
+        /* 复制成功时的短暂反馈 */
+        button.copied {
+            background: #28a745;
+        }
+
         /* 文件列表区域样式 */
         .file-list-container {
             flex: 1;
@@ -240,9 +256,10 @@
             <input type="number" id="height-input" value="920" min="100">
         </div>
 
-        <button id="preview-btn" type="button" disabled>
-            复制当前预览链接
-        </button>
+        <div class="button-row">
+            <button id="preview-btn" type="button" disabled title="复制完整的 iframe 嵌入代码">复制 iframe</button>
+            <button id="copy-link-btn" type="button" disabled title="只复制 URL 地址">复制链接</button>
+        </div>
 
     </div>
 
@@ -250,6 +267,7 @@
         const widthInput = document.getElementById('width-input');
         const heightInput = document.getElementById('height-input');
         const previewBtn = document.getElementById('preview-btn');
+        const copyLinkBtn = document.getElementById('copy-link-btn');
         const previewIframe = document.getElementById('preview-iframe');
         const previewFrame = document.getElementById('preview-frame');
         const fileCount = document.getElementById('file-count');
@@ -362,6 +380,7 @@
         async function loadGgbFiles() {
             fileListContainer.innerHTML = '<div class="empty-tip">正在扫描文件夹...</div>';
             previewBtn.disabled = true;
+            copyLinkBtn.disabled = true;
             folderError.style.display = 'none';
 
             try {
@@ -395,6 +414,7 @@
                 fileListContainer.innerHTML = '<div class="empty-tip">ggbfiles 文件夹及子文件夹中未找到 .ggb 文件</div>';
                 fileCount.textContent = '(共 0 个文件)';
                 previewBtn.disabled = true;
+                copyLinkBtn.disabled = true;
                 return;
             }
 
@@ -466,6 +486,7 @@
 
             fileCount.textContent = `(共 ${totalFilesCount} 个文件)`;
             previewBtn.disabled = false;
+            copyLinkBtn.disabled = false;
 
             // 默认选中并预览第一个找到的文件
             if (firstFileItem) {
@@ -501,6 +522,21 @@
             previewIframe.src = previewUrl;
         }
 
+        // 复制成功后的短暂视觉反馈：按钮文字闪一下再复原
+        const flashTimers = new WeakMap();
+        function flashButton(btn, text) {
+            if (!btn.dataset.label) btn.dataset.label = btn.textContent.trim();
+            const label = btn.dataset.label;
+            clearTimeout(flashTimers.get(btn));
+            btn.textContent = text;
+            btn.classList.add('copied');
+            const timer = setTimeout(() => {
+                btn.textContent = label;
+                btn.classList.remove('copied');
+            }, 1200);
+            flashTimers.set(btn, timer);
+        }
+
         async function copyCurrentLink() {
             if (!currentSelectedPath) return;
 
@@ -516,7 +552,30 @@
 
             try {
                 await navigator.clipboard.writeText(iframeHtml);
+                flashButton(previewBtn, '✓ 已复制');
                 console.log('已自动复制 iframe 标签');
+            } catch (err) {
+                console.error('自动复制失败:', err);
+            }
+        }
+
+        // 只复制纯 URL：路径中的空格转成 %20（裸空格在 Markdown/邮件里会断链），中文保持可读
+        async function copyPlainLink() {
+            if (!currentSelectedPath) return;
+
+            const width = widthInput.value;
+            const height = heightInput.value;
+
+            if (!width || !height) return;
+
+            const base = getBasePath();
+            const safePath = currentSelectedPath.replace(/ /g, '%20');
+            const plainUrl = `${base}at.html?file=${safePath}&width=${width}&height=${height}`;
+
+            try {
+                await navigator.clipboard.writeText(plainUrl);
+                flashButton(copyLinkBtn, '✓ 已复制');
+                console.log('已自动复制纯链接');
             } catch (err) {
                 console.error('自动复制失败:', err);
             }
@@ -525,6 +584,7 @@
         widthInput.addEventListener('input', () => { previewFile(); updateFrameSize(); });
         heightInput.addEventListener('input', () => { previewFile(); updateFrameSize(); });
         previewBtn.addEventListener('click', copyCurrentLink);
+        copyLinkBtn.addEventListener('click', copyPlainLink);
     </script>
 </body>
 
